@@ -1,0 +1,36 @@
+# Generated directories
+autom4te.cache/
+.deps/
+.libs/
+
+# Binary files
+*.o
+*.l[ao]
+*.pyc
+
+# Generated files
+*.pc
+m4/*
+!m4/docsetup.m4
+!m4/shave.m4
+!m4/websockets.m4
+aclocal.m4
+compile
+config.*
+configure
+depcomp
+install-sh
+libtool
+linker-script.*
+ltmain.sh
+Makefile
+Makefile.in
+missing
+shave
+shave-libtool
+ylwrap
+
+# Our githook temporary files
+.rebase-branch-name
+
+# Generated files
