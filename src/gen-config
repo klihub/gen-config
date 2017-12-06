@@ -1,0 +1,32 @@
+#!/usr/bin/env python3
+
+import sys, os
+
+GENCFG_DATA_DIR = '/usr/share/gen-config'
+GENCFG_PROFILE_DIR = os.path.join(GENCFG_DATA_DIR, 'profiles')
+GENCFG_CHECK_FILES = [ 'README.md', 'src' ]
+src_dir = os.path.abspath(os.path.dirname(__file__))
+top_dir = os.path.abspath(os.path.join(src_dir, '..'))
+
+for f in GENCFG_CHECK_FILES:
+    if not os.path.exists(os.path.join(top_dir, f)):
+        gencfg_dir = GENCFG_DATA_DIR
+        break
+else:
+    print('Running from the source tree (%s)...' % top_dir)
+    gencfg_dir = src_dir
+    sys.path.insert(0, src_dir)
+
+import genconfig.config as config
+import genconfig.parser as parser
+import genconfig.log as log
+
+if __name__ == '__main__':
+    cfg = config.Cfg(gencfg_dir, sys.argv)
+    cfg.parse()
+    cfg.dump()
+    cfg.generate()
+    if cfg.write():
+        log.progress('Configuration generated/updated.')
+    else:
+        log.progress('Configuration was already up-to-date.')
