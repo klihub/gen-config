@@ -77,6 +77,7 @@ class Interface(Node):
         else:
             for a in self.addresses:
                 f.write('Address=%s' % str(a), 'Network')
+        f.write('LinkLocalAddressing=no', 'Network')
         for id in self.vlans:
             f.write('VLAN=%s.%d' % (self.name, id), 'Network')
         f.close()
