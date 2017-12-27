@@ -77,10 +77,15 @@ class Interface(Node):
         else:
             for a in self.addresses:
                 f.write('Address=%s' % str(a), 'Network')
+        for id in self.vlans:
+            f.write('VLAN=%s.%d' % (self.name, id), 'Network')
         f.close()
         for id in self.vlans:
             log.progress('generating device for VLAN #%d...' % id)
-            f = fs.open('/etc/systemd/network/00-vlan-%d.netdev' % id, ini=True)
+            f = fs.open('/etc/systemd/network/00-%s-vlan%d.netdev' %
+                        (self.name, id), ini=True)
+            f.write('Name=%s.%d' % (self.name, id), 'NetDev')
+            f.write('Kind=vlan')
             f.write('Id=%d' % id, 'VLAN')
             f.close()
 
