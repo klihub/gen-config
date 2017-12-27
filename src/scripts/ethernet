@@ -1,0 +1,42 @@
+#!/bin/sh
+
+SW=/conf/software
+HW=/conf/hardware
+
+# sort (and name) ethernet interfaces by MAC address
+sort_by_mac () {
+    mkdir -p $HW/etc/systemd/network
+    macs=$(ip link ls | grep -vi loopback | grep link/ether | \
+               sed 's/^ *//g' | cut -d ' ' -f 2 | sort)
+    devs=${INTERFACES//,/ }
+
+    for m in $macs; do
+        d=${devs%% *}
+        devs=${devs#* }
+        f=$HW/etc/systemd/network/00-$d.link
+        echo "Generating $f..."
+        > $f cat <<EOF
+[Match]
+MACAddress=$m
+[Link]
+NamePolicy=disabled
+Name=$d
+EOF
+    done
+}
+
+
+###########################
+# main script
+
+. $SW/etc/sysconfig/ethernet
+
+case $SETUP_METHOD in
+  sort-mac)
+      sort_by_mac
+      ;;
+  *)
+      echo "Unknown setup method $SETUP_METHOD"
+      exit 1
+      ;;
+esac

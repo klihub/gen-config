@@ -1,0 +1,15 @@
+#!/bin/sh
+
+ETC=/etc
+SW=/conf/software/etc
+HW=/conf/hardware/etc
+WORK=/conf/work
+
+LOWER=/conf/hardware/etc:/conf/software/etc:/etc
+UPPER=/conf/upper/etc
+WORK=/conf/work
+MERGED=/conf/etc
+
+mount -t overlay overlay \
+    -o lowerdir=$LOWER,upperdir=$UPPER,workdir=$WORK $MERGED
+mount --bind $MERGED /etc

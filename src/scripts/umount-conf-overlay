@@ -1,0 +1,14 @@
+#!/bin/sh
+
+ETC=/etc
+SW=/conf/software/etc
+HW=/conf/hardware/etc
+WORK=/conf/work
+
+LOWER=/conf/hardware/etc:/conf/software/etc:/etc
+UPPER=/conf/upper/etc
+WORK=/conf/work
+MERGED=/conf/etc
+
+umount /etc && umount $MERGED
+
