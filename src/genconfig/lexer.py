@@ -111,7 +111,7 @@ class Lexer(TokenSet):
             try:
                 sys.modules[m] = importlib.import_module(m)
                 return
-            except ModuleNotFoundError as e:
+            except ImportError as e:
                 pass
         raise RuntimeError('module "%s" not found in any profile' % name)
 
