@@ -10,7 +10,7 @@ for p in profile_dirs:
     if not module_files:
         continue
     profile = p.split('src/profiles/')[1]
-    profile_dir = os.path.join(sys.prefix, 'share', 'gen-config',
+    profile_dir = os.path.join('share', 'gen-config',
                                'profiles', profile, 'modules')
     modules = [x for x in module_files]
     profiles.append((profile_dir, modules))
