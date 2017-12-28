@@ -63,7 +63,7 @@ class RuleSet(Lexer):
         Lexer.__init__(self, profile, path)
 
     def compile(self, rule):
-        self.debug('compiling rule %s => %s' % (rule.pattern, rule.callback))
+        log.debug('compiling rule %s => %s' % (rule.pattern, rule.callback))
         pattern = ''
         i = 0
         while i < len(rule.pattern):
@@ -89,7 +89,7 @@ class RuleSet(Lexer):
             pattern += '(' + str(id) + ')'
             i = end + 1
 
-        self.debug('%s => %s' % (rule.pattern, pattern))
+        log.debug('%s => %s' % (rule.pattern, pattern))
         rule.re = re.compile(pattern)
 
     def compile_rules(self):
@@ -134,7 +134,7 @@ class Parser(RuleSet):
 
     def parse_node(self, node_tkn, parent):
         node_name = node_tkn.str
-        self.debug('parsing node %s...' % node_name)
+        log.debug('parsing node %s...' % node_name)
         self.demand_load(node_name)
         if node_name not in self.nodes.keys():
             raise RuntimeError('%s:%d: unknown node type %s' %
@@ -148,7 +148,7 @@ class Parser(RuleSet):
         node = nodedef.type(nodedef, root, parent, node_tkn, *extra)
         tokens = self.pull_tokens(node_tkn.level)
 
-        self.debug('%s block: %s' %
+        log.debug('%s block: %s' %
                    (node_name, ' '.join(x.str for x in tokens)))
         
         while tokens:
@@ -156,7 +156,7 @@ class Parser(RuleSet):
             tknstr = ' '.join(x.type for x in tokens)
             xltstr = re.sub(r' , ', ', ', ' '.join(str(x) for x in xlated))
 
-            self.debug('%s xlated to %s' % (tknstr, xltstr))
+            log.debug('%s xlated to %s' % (tknstr, xltstr))
 
             rule, match = self.match_rule(self.rules[node_name], xltstr)
 
@@ -170,12 +170,12 @@ class Parser(RuleSet):
 
                 tokens = self.pull_tokens(node_tkn.level)
             else:
-                self.debug('%s => %s (%s)' %
+                log.debug('%s => %s (%s)' %
                            (tknstr, rule.re.pattern, rule.callback))
                 n = match.count(' ') + match.count(',') + 1
                 args = tokens[0:n]
                 tokens = tokens[n:]
-                self.debug('matched tokens %d => %s' %
+                log.debug('matched tokens %d => %s' %
                            (n, ' '.join(x.str for x in tokens)))
 
                 c = getattr(node, rule.callback)
@@ -194,17 +194,17 @@ class Parser(RuleSet):
         rule = None
         match = None
         for r in rules:
-            self.debug('matching "%s" against "%s"' % (tknstr, r.re.pattern))
+            log.debug('matching "%s" against "%s"' % (tknstr, r.re.pattern))
             m = r.re.match(tknstr)
             if m is not None:
-                self.debug(' => match (%s)' % m.group(0))
+                log.debug(' => match (%s)' % m.group(0))
                 l = len(m.group(0))
                 if l > max:
                     max = l
                     rule = r
                     match = m
             else:
-                self.debug(' => mismatch')
+                log.debug(' => mismatch')
                     
         return rule, match.group(0) if match else None
 

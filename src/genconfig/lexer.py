@@ -18,7 +18,7 @@
 import sys, importlib, os, re
 import genconfig.log as log
 
-class TokenSet(log.Logger):
+class TokenSet():
     """A class for handling keywords and tokens the lexer understands."""
 
     keywords = {}
@@ -41,7 +41,7 @@ class TokenSet(log.Logger):
                         self.idtbl[tkn.type] = tkn.id
                         self.typetbl[tkn.id] = tkn.type
                         next_id += 1
-                        self.debug('%s %s => #%d' % (what, tkn.type, tkn.id))
+                        log.debug('%s %s => #%d' % (what, tkn.type, tkn.id))
                     else:
                         tkn.id = id
             what = 'token'
@@ -96,7 +96,7 @@ class Lexer(TokenSet):
                     self.include_file(path, tkn.level, input.path)
                     break
                 else:
-                    self.debug('+ token %s@%d' % (tkn.str, tkn.level))
+                    log.debug('+ token %s@%d' % (tkn.str, tkn.level))
                     self.tokenq.append(tkn)
             else:
                 self.files.pop(-1)
@@ -195,7 +195,7 @@ class Lexer(TokenSet):
                     tkn.type = kw.type
                     break
             if tkn.type is not None:
-                self.debug('token %s: keyword %s' % (tkn.str, tkn.type))
+                log.debug('token %s: keyword %s' % (tkn.str, tkn.type))
 
     def classify_tokens(self, tokens):
         for tkn in tokens:
@@ -217,7 +217,7 @@ class Lexer(TokenSet):
             if tkn.type == '_dash_':
                 tkn.type = '-'
             
-            self.debug('token %s: token %s' % (tkn.str, tkn.type))
+            log.debug('token %s: token %s' % (tkn.str, tkn.type))
 
     def push_context(self, name):
         kl = self.keywords[name] if name in self.keywords.keys() else []
@@ -229,7 +229,7 @@ class Lexer(TokenSet):
         self.active_keywords.pop(-1)
         self.active_tokens.pop(-1)
 
-    class TokenDef(log.Logger):
+    class TokenDef():
         """A token definition for classifying tokens."""
         def __init__(self, match, type):
             self.match = match
@@ -242,11 +242,11 @@ class Lexer(TokenSet):
             if tkn.type is not None:
                 return
             if type(self.match) == type(''):
-                self.debug('testing token %s with %s' % (tkn.str, self.match))
+                log.debug('testing token %s with %s' % (tkn.str, self.match))
                 if tkn.str == self.match:
                     tkn.type = self.type
             elif type(self.match) == Lexer.regexp_type:
-                self.debug('testing token %s with %s' % (tkn.str,
+                log.debug('testing token %s with %s' % (tkn.str,
                                                          self.match.pattern))
 
                 m = self.match.match(tkn.str)
@@ -256,7 +256,7 @@ class Lexer(TokenSet):
                 self.match(tkn)
 
             if tkn.type is not None:
-                #self.debug('token %s: type %s' % (tkn.str, tkn.type))
+                #log.debug('token %s: type %s' % (tkn.str, tkn.type))
                 pass
 
             return True if tkn.type is not None else False

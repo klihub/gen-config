@@ -30,45 +30,8 @@ class Logger:
     def __init__(self, levels = default_levels):
         log_set_mask(levels)
 
-    def log_set_mask(self, levels):
-        set_mask(levels)
-
-    def log(self, level, msg):
-        log(level, msg)
-
-    def fatal(self, msg):
-        fatal(msg)
-
-    def error(self, msg):
-        error(msg)
-
-    def warning(self, msg):
-        warning(msg)
-
-    def progress(self, msg):
-        progress(msg)
-
-    def info(self, msg):
-        info(msg)
-
-    def note(self, msg):
-        note(msg)
-
-    def debug_enable(self, contexts):
-        debug_enable(contexts)
-
-    def debug_enabled(self, contexts):
-        return debug_enabled(contexts)
-
-    def debug(self, *args):
-        debug(*args)
-
-    def parse_cmdline(self, args):
-        parse_cmdline(args)
-
-
 def set_mask(levels):
-    Logger.log_mask = Logger.log_unmaskable
+    Logger.log_mask |= Logger.log_unmaskable
 
     if type(levels) == type([]):
         for l in levels:
