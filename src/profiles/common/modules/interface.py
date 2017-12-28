@@ -34,7 +34,7 @@ class Interface(Node):
         else:
             beg, end = map(lambda x: int(x), vlan.str.split('-'))
             diff = +1 if end > beg else -1
-            for id in range(beg, end, diff):
+            for id in range(beg, end + diff, diff):
                 if id not in self.vlans:
                     self.vlans.append(id)
         self.vlans.sort()
