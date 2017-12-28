@@ -7,6 +7,8 @@ from genconfig.parser import *
 class DhcpServer(Node):
 
     V4_TYPE = type(ipaddress.ip_address('0.0.0.0'))
+    SYSCONFIG = '/etc/sysconfig/dhcp-server'
+    CONFIGFILE = '/etc/dhcp/dhcpd.conf'
 
     def __init__(self, nodedef, root, parent, node_tkn):
         Node.__init__(self, nodedef, root, parent, node_tkn)
@@ -167,11 +169,11 @@ class DhcpServer(Node):
     def generate(self, fs):
         log.progress('generating DHCP server for link %s...' % self.link)
         net, mask = self.net.with_netmask.split('/')
-        f = fs.open('/etc/dhcpd.conf')
-        f.write('subnet %s netamask %s {' % (net, mask))
+        f = fs.open(DhcpServer.CONFIGFILE)
+        f.write('subnet %s netmask %s {' % (net, mask))
         if self.domain:
             f.write('  option domain-name "%s";' % self.domain)
-        f.write('  option doman-name-servers %s;' %
+        f.write('  option domain-name-servers %s;' %
                 ','.join([str(x) for x in self.nameservers]))
         f.write('  option routers %s;' % self.router)
         f.write('  range %s %s;' % (self.range[0], self.range[1]))
@@ -185,7 +187,7 @@ def generate_dhcp_servers(nodedef, servers, fs):
     for s in servers:
         s.generate(fs)
         links.append(s.link)
-    f = fs.open('/etc/sysconfig/dhcpd')
+    f = fs.open(DhcpServer.SYSCONFIG)
     f.write('INTERFACES="%s"' % ' '.join(links))
     f.close()
 
