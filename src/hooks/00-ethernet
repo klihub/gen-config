@@ -1,7 +1,30 @@
 #!/bin/sh
 
-SW=/conf/software
-HW=/conf/hardware
+# mount $CONFFS
+mount_conffs () {
+    cat /proc/mounts | grep -q " $CONFFS " || mount $CONFFS
+}
+
+# load our configuration if it exists
+load_config () {
+    CONFIG=$SW/etc/sysconfig/ethernet
+    if [ ! -e $CONFIG ]; then
+        exit 0
+    else
+        . $CONFIG
+    fi
+}
+
+# load any necessary modules
+probe_modules () {
+    if [ -z "$MODULES" ]; then
+        return 0
+    fi
+    
+    for m in $MODULES; do
+        /sbin/modprobe $m
+    done
+}
 
 # sort (and name) ethernet interfaces by MAC address
 sort_by_mac () {
@@ -29,7 +52,18 @@ EOF
 ###########################
 # main script
 
-. $SW/etc/sysconfig/ethernet
+if [ "$1" = "-n" -o "$1" = "--dry-run" ]; then
+    xeq=echo
+    shift
+fi
+
+CONFFS=${1:-/conf}
+SW=$CONFFS/software
+HW=$CONFFS/hardware
+
+mount_conffs
+load_config
+probe_modules
 
 case $SETUP_METHOD in
   sort-mac)

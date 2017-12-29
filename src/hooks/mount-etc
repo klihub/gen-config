@@ -1,0 +1,64 @@
+#!/bin/sh
+
+file_inode () {
+    _l=$(stat $1 | grep Device: | grep Inode: | tr -s '\t' ' ')
+    _d=$(echo $_l | cut -d ' ' -f 2); _d=${_d%/*}
+    _i=$(echo $_l | cut -d ' ' -f 4)
+    echo $_d:$_i
+}
+
+check_etc () {
+   _inode_a=$(file_inode $1)
+   _inode_b=$(file_inode $2)
+
+   if [ "$_inode_a" = "$_inode_b" ]; then
+       return 0
+   else
+       return 1
+   fi
+}
+
+mount_conffs () {
+    cat /proc/mounts | grep -q " $CONFFS " || $xeq mount $CONFFS
+}   
+
+prepare_conffs () {
+    $xeq mkdir -p $(echo $LOWER | tr ':' ' ') $UPPER $WORK $PRISTINE $RUNTIME
+}
+
+prepare_overlay () {
+    $xeq mount --bind /etc $PRISTINE && \
+      $xeq mount -t overlay overlay \
+          -o lowerdir=$LOWER:$PRISTINE,upperdir=$UPPER,workdir=$WORK \
+          $RUNTIME
+}
+
+bind_etc () {
+    $xeq mount --bind $RUNTIME /etc
+}
+
+#########################
+# main script
+
+if [ "$1" = "-n" -o "$1" = "--dry-run" ]; then
+    xeq=echo
+    shift
+fi
+
+CONFFS=${1:-/conf}
+PRISTINE="$CONFFS/pristine/etc"
+LOWER="$CONFFS/hardware/etc:$CONFFS/software/etc"
+UPPER="$CONFFS/changes/etc"
+RUNTIME="$CONFFS/runtime/etc"
+WORK="$CONFFS/workdir/etc"
+
+mount_conffs
+
+if check_etc /etc $RUNTIME; then
+    echo "$RUNTIME already bind-mounted to /etc..."
+    exit 0
+fi
+
+prepare_conffs && \
+    prepare_overlay && \
+    bind_etc

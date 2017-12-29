@@ -1,12 +1,13 @@
 [Unit]
-Description=Prepare /conf and bind-mount it over /etc.
+Description=Regenerate component-specific configuration (/conf) if necessary.
 DefaultDependencies=no
-Before=systemd-udev-trigger.service
-#RequiresMountsFor=/conf
+Before=conffs-mount.service systemd-udev-trigger.service
 
 [Service]
-ExecStartPre=/usr/bin/mount /conf
-ExecStart=/conf/run.d/run-all
+ExecStart=/usr/share/gen-config/hooks/run-hooks
 Type=oneshot
 RemainAfterExit=yes
 TimeoutSec=30
+
+[Install]
+WantedBy=sysinit.target

@@ -1,0 +1,13 @@
+[Unit]
+Description=Mount Prepare /conf and bind-mount it over /etc.
+DefaultDependencies=no
+Before=systemd-udev-trigger.service
+
+[Service]
+ExecStart=/usr/share/gen-config/hooks/mount-etc
+Type=oneshot
+RemainAfterExit=yes
+TimeoutSec=30
+
+[Install]
+WantedBy=sysinit.target

@@ -3,7 +3,7 @@
 from distutils.core import setup
 import sys, os, glob
 
-profiles = []
+data_files = []
 profile_dirs = glob.glob('src/profiles/*')
 for p in profile_dirs:
     module_files = glob.glob(os.path.join(p, 'modules', '*.py'))
@@ -13,11 +13,22 @@ for p in profile_dirs:
     profile_dir = os.path.join('share', 'gen-config',
                                'profiles', profile, 'modules')
     modules = [x for x in module_files]
-    profiles.append((profile_dir, modules))
-    print('%s: %s' % (profiles[-1][0], profiles[-1][1]))
+    data_files.append((profile_dir, modules))
 
-for p in profiles:
-    print('%s: %s' % (p[0], p[1]))
+hook_dst = os.path.join('share', 'gen-config', 'hooks')
+hook_src = os.path.join('src', 'hooks')
+hooks = glob.glob(os.path.join(hook_src, '???*'))
+if hooks:
+    data_files.append((hook_dst, hooks))
+
+service_dst = os.path.join('lib', 'systemd', 'system')
+service_src = os.path.join('src', 'systemd')
+services = glob.glob(os.path.join(service_src, '*.service'))
+if services:
+    data_files.append((service_dst, services))
+
+for df in data_files:
+    print('data file set %s: %s' % (df[0], df[1]))
 
 setup(name = 'genconfig',
       version = '0.0',
@@ -28,6 +39,6 @@ setup(name = 'genconfig',
       packages = ['genconfig'],
       scripts = ['src/gen-config'],
       package_dir = { 'genconfig': 'src/genconfig' },
-      data_files = profiles,
+      data_files = data_files,
 )
-      
+
