@@ -1,0 +1,45 @@
+#!/bin/sh
+
+RECONFIG=/conf/.reconfigure                   
+
+run_config_hooks () {
+    hooks=$(ls /conf/run.d/[0-9]* | sort)
+    for h in $hooks; do
+        case $h in
+            *.swp|*~) continue;;
+        esac
+        if [ ! -x $h ]; then
+            continue
+        fi
+
+        echo "Running conf-hook $h..."
+        if ! $xeq $h; then            
+            echo "conf-hook $h FAILED"
+            failed="$failed $h"
+        fi
+    done
+
+    if [ -n "$failed" ]; then
+        echo "The following config hooks failed:"
+        echo "    $failed"
+        echo "$failed" >> $RECONFIG.failed
+        return 1
+    else
+        return 0
+    fi
+}
+
+if [ "$1" = "-n" -o "$1" = "--dry-run" ]; then
+    xeq=echo
+fi
+
+if [ -e $RECONFIG  ]; then
+    if ! run_config_hooks; then
+        exit 1
+    fi
+else
+    echo "Reconfig-marker ($RECONFIG) not in place, already up-to-date..."
+fi
+
+$xeq /conf/run.d/mount-etc
+
