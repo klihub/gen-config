@@ -1,0 +1,12 @@
+[Unit]
+Description=Prepare /conf and bind-mount it over /etc.
+DefaultDependencies=no
+Before=systemd-udev-trigger.service
+#RequiresMountsFor=/conf
+
+[Service]
+ExecStartPre=/usr/bin/mount /conf
+ExecStart=/conf/run.d/run-all
+Type=oneshot
+RemainAfterExit=yes
+TimeoutSec=30
