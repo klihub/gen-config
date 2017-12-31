@@ -1,66 +1,40 @@
 #!/bin/sh
 
-mount_conffs () {
-    cat /proc/mounts | grep -q " $CONFFS " || mount $CONFFS
-}
-
-check_marker () {
-    mount_conffs
-
-    if [ ! -e $MARKER ]; then
-        echo "Reconfig-marker ($MARKER) not in place, already up-to-date..."
-        return 1
-    else
-        return 0
-    fi
-}
-
-clear_marker () {
-    rm -f $MARKER
-}
-
-run_config_hooks () {
-    hook_dir=${0%/*}
-    if [ "$hook_dir" = "$0" ]; then
-        hook_dir=/usr/share/gen-config/hooks
-    fi
-    
-    hooks=$(ls $hook_dir/[0-9]* | sort)
-    for h in $hooks; do
-        if [ ! -x $h ]; then
-            continue
-        fi
-
-        echo "Running conf-hook $h..."
-        if ! $xeq $h; then            
-            echo "$h: FAILED"
-            failed_hooks="$failed_hooks $h"
-        else
-            echo "$h: OK"
-        fi
-    done
-
-    if [ -n "$failed_hooks" ]; then
-        echo "The following conf-hooks failed:"
-        echo "    $failed_hooks"
-        echo "$failed_hooks" >> $MARKER.failed
-        return 1
-    else
-        return 0
-    fi
-}
-
-#########################
-# main script
+export CONFFS_LABEL=${CONFFS_LABEL:-config}
+export CONFFS_PATH=${CONFFS_PATH:-/conf}
 
 if [ "$1" = "-n" -o "$1" = "--dry-run" ]; then
     xeq=echo
+    DRY_RUN="-n"
     shift
 fi
 
-CONFFS=${1:-/conf}
-MARKER="$CONFFS/.reconfigure"
+hook_dir=${0%/*}
+if [ "$hook_dir" = "$0" ]; then
+    hook_dir=/usr/share/gen-config/hooks
+fi
 
-if check_marker; then
-    run_config_hooks && clear_marker
+hooks=$(ls $hook_dir/[0-9]* | sort)
+for h in $hooks; do
+    if [ ! -x $h ]; then
+        continue
+    fi
+
+    echo "Running conf-hook $h..."
+    if ! $xeq $h $DRY_RUN; then
+        echo "$h: FAILED"
+        failed_hook="$h"
+        break
+    else
+        echo "$h: OK"
+    fi
+done
+
+if [ -n "$failed_hook" ]; then
+    echo "conf-hook $failed_hook failed."
+    echo "$failed_hook" >> $CONFFS_PATH/.reconfigure.failed
+    return 1
+else
+    rm -f $CONFFS_PATH/.reconfigure
+    return 0
 fi

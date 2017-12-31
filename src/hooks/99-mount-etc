@@ -7,7 +7,7 @@ file_inode () {
     echo $_d:$_i
 }
 
-check_etc () {
+cmp_dev_inode () {
    _inode_a=$(file_inode $1)
    _inode_b=$(file_inode $2)
 
@@ -18,19 +18,13 @@ check_etc () {
    fi
 }
 
-mount_conffs () {
-    cat /proc/mounts | grep -q " $CONFFS " || $xeq mount $CONFFS
-}   
-
-prepare_conffs () {
+prepare_directories () {
     $xeq mkdir -p $(echo $LOWER | tr ':' ' ') $UPPER $WORK $PRISTINE $RUNTIME
 }
 
 prepare_overlay () {
-    $xeq mount --bind /etc $PRISTINE && \
-      $xeq mount -t overlay overlay \
-          -o lowerdir=$LOWER:$PRISTINE,upperdir=$UPPER,workdir=$WORK \
-          $RUNTIME
+    $xeq mount -t overlay overlay \
+        -o lowerdir=$LOWER:$PRISTINE,upperdir=$UPPER,workdir=$WORK $RUNTIME
 }
 
 bind_etc () {
@@ -45,20 +39,15 @@ if [ "$1" = "-n" -o "$1" = "--dry-run" ]; then
     shift
 fi
 
-CONFFS=${1:-/conf}
-PRISTINE="$CONFFS/pristine/etc"
-LOWER="$CONFFS/hardware/etc:$CONFFS/software/etc"
-UPPER="$CONFFS/changes/etc"
-RUNTIME="$CONFFS/runtime/etc"
-WORK="$CONFFS/workdir/etc"
+PRISTINE="/.pristine-etc"
+LOWER="$CONFFS_PATH/hardware/etc:$CONFFS_PATH/software/etc"
+UPPER="$CONFFS_PATH/changes/etc"
+RUNTIME="$CONFFS_PATH/runtime/etc"
+WORK="$CONFFS_PATH/workdir/etc"
 
-mount_conffs
-
-if check_etc /etc $RUNTIME; then
+if cmp_dev_inode /etc $RUNTIME; then
     echo "$RUNTIME already bind-mounted to /etc..."
     exit 0
 fi
 
-prepare_conffs && \
-    prepare_overlay && \
-    bind_etc
+prepare_directories && prepare_overlay && bind_etc

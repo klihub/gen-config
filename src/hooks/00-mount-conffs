@@ -1,0 +1,18 @@
+#!/bin/sh
+
+if [ "$1" = "-n" -o "$1" = "--dry-run" ]; then
+    xeq=echo
+    shift
+fi
+
+if cat /proc/mounts | grep -q " $CONFFS_PATH "; then
+    echo "conffs already mounted..."
+    return 0
+fi
+
+return 0
+
+if ! $xeq mount -t auto LABEL=$CONFFS_LABEL $CONFFS_PATH; then
+    echo "failed to mount conffs."
+    return 1
+fi

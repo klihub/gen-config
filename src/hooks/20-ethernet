@@ -1,0 +1,129 @@
+#!/bin/sh
+
+CONFIG=$CONFFS_PATH/software/etc/sysconfig/ethernet
+HW=$CONFFS_PATH/hardware
+
+check_marker () {
+    if [ -e $CONFFS_PATH/.reconfigure ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+load_config () {
+    if [ ! -e $CONFIG ]; then
+        echo "No configuration ($CONFIG)..."
+        exit 0
+    else
+        echo "Loading configuration ($CONFIG)..."
+        . $CONFIG
+    fi
+}
+
+# load any necessary modules
+load_modules () {
+    for m in $MODULES; do
+        echo "Loading module $m..."
+    done
+}
+
+# load all ethernet modules found
+probe_modules () {
+    mods=$(find /lib/modules/$(uname -r)/kernel/drivers/net/ethernet \
+               -type f -name '*.ko')
+    for m in $mods; do
+        m=${m##*/}; m=${m%.ko}
+        echo "Loading found module $m..."
+        modprobe $m
+    done
+}
+
+# get the list of MAC addresses
+probe_macs () {
+    entries=$(find /sys/devices -name address | grep /net/ | grep -v /virtual/)
+    echo "*** entries = $entries"
+    if [ -n "$entries" ]; then
+        MACS=$(cat $entries | sort)
+    fi
+
+    if [ -n "$MACS" ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# get the list of MAC addresses
+get_macs () {
+    load_modules
+
+    if ! probe_macs; then
+        probe_modules
+        probe_macs
+    fi
+
+    if [ -n "$MACS" ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# write a link file for a device/MAC address
+write_device_link () {
+    dev=$1; mac=$2
+    f=$HW/etc/systemd/network/00-$dev.link
+    echo "Writing .link file ($f) for device $dev/$mac..."
+    > $f cat <<EOF
+[Match]
+MACAddress=$mac
+[Link]
+NamePolicy=disabled
+Name=$dev
+EOF
+}
+
+# sort (and name) ethernet interfaces by MAC address
+sort_by_mac () {
+    if ! get_macs; then
+        echo "Couldn't find any network interfaces."
+        exit 1
+    fi
+
+    echo "Generating interfaces ($INTERFACES) by sorting MAC addresses..."
+    mkdir -p $HW/etc/systemd/network
+
+    devs=${INTERFACES//,/ }
+    for m in $MACS; do
+        d=${devs%% *}
+        devs=${devs#* }
+        write_device_link $d $m
+    done
+}
+
+
+###########################
+# main script
+
+if [ "$1" = "-n" -o "$1" = "--dry-run" ]; then
+    xeq=echo
+    shift
+fi
+
+if ! check_marker; then
+    return 0
+fi
+
+load_config
+probe_macs
+
+case $SETUP_METHOD in
+  sort-mac)
+      sort_by_mac
+      ;;
+  *)
+      echo "Unknown setup method $SETUP_METHOD"
+      exit 1
+      ;;
+esac

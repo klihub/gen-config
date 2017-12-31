@@ -1,0 +1,32 @@
+#!/bin/sh
+
+check_marker () {
+    if [ -e $CONFFS_PATH/.reconfigure ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+generate_config () {
+    gen-config -D $CONFFS_PATH/software $CONFFS_PATH/config/config.cfg
+    return $?
+}
+
+#########################
+# main script
+
+if [ "$1" = "-n" -o "$1" = "--dry-run" ]; then
+    xeq=echo
+    shift
+fi
+
+if ! check_marker; then
+    return 0
+fi
+
+if ! generate_config; then
+    return 1
+else
+    return 0
+fi

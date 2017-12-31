@@ -21,11 +21,11 @@ hooks = glob.glob(os.path.join(hook_src, '???*'))
 if hooks:
     data_files.append((hook_dst, hooks))
 
-service_dst = os.path.join('lib', 'systemd', 'system')
-service_src = os.path.join('src', 'systemd')
-services = glob.glob(os.path.join(service_src, '*.service'))
-if services:
-    data_files.append((service_dst, services))
+#service_dst = os.path.join('lib', 'systemd', 'system')
+#service_src = os.path.join('src', 'systemd')
+#services = glob.glob(os.path.join(service_src, '*.service'))
+#if services:
+#    data_files.append((service_dst, services))
 
 for df in data_files:
     print('data file set %s: %s' % (df[0], df[1]))
