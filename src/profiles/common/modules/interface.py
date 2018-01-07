@@ -11,6 +11,7 @@ class Interface(Node):
         self.name = name.str
         self.vlans = []
         self.addresses = []
+        self.uplink = False
 
     def parse_config(self, kw_config, state, *tokens):
         if state.str == 'down':
@@ -38,6 +39,9 @@ class Interface(Node):
                 if id not in self.vlans:
                     self.vlans.append(id)
         self.vlans.sort()
+
+    def parse_uplink(self, uplink):
+        self.uplink = True
 
     def check_config(self):
         if not self.addresses:
@@ -96,11 +100,13 @@ def generate_interfaces(nodedef, interfaces, fs):
 
 NodeDef(
     'interface', Interface, 1,
-    Lexer.Keywords(['vlans', 'config', 'ipv4', 'down', 'dhcp']),
+    Lexer.Keywords(['vlans', 'config', 'ipv4', 'down', 'dhcp', 'uplink']),
     [Lexer.TokenRegex(r'([0-9]{1,3}\.){3}[0-9]{1,3}(/[0-9]{1,2})?', 'address')],
     [Parser.Rule('_vlans_ (_int_|_intrange_)(, (_int_|_intrange_))*', 'parse_vlans' ),
      Parser.Rule('_config_ _down_'                            , 'parse_config'),
      Parser.Rule('_config_ _dhcp_'                            , 'parse_config'),
-     Parser.Rule('_config_ _ipv4_ _address_(, _address_)*'    , 'parse_config')],
+     Parser.Rule('_config_ _ipv4_ _address_(, _address_)*'    , 'parse_config'),
+     Parser.Rule('_uplink_'                                   , 'parse_uplink'),
+    ],
     generate_interfaces,
 )

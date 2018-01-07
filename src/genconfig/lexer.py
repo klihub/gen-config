@@ -149,12 +149,17 @@ class Lexer(TokenSet):
 
     def pull_tokens(self, level = -1, n = -1):
         tokens = []
-        while self.tokenq and (self.tokenq[0].level > level or
-                               self.tokenq[0].level < 0) and n != 0:
+        while self.tokenq and n != 0 and \
+            ((self.tokenq[0].level > level and level >= 0) or \
+             self.tokenq[0].level < 0):
             n -= 1
             tokens.append(self.classify(self.tokenq.pop(0)))
+        # I hate not having macros...
+        #log.debug('level %d token pull => %s' %
+        #          (level,
+        #           ', '.join(['%s@%d' % (x.str, x.level) for x in tokens])))
         return tokens
-    
+
     def pushback_token(self, tkn):
         tkn.type = None
         self.tokenq.insert(0, tkn)
@@ -216,23 +221,34 @@ class Lexer(TokenSet):
                 tkn.type = ','
             if tkn.type == '_dash_':
                 tkn.type = '-'
-            
+
             log.debug('token %s: token %s' % (tkn.str, tkn.type))
 
     def push_context(self, name):
+        log.debug('push_context %s' % name)
         kl = self.keywords[name] if name in self.keywords.keys() else []
         tl = self.tokens[name] if name in self.tokens.keys() else []
         self.active_keywords.append(kl)
         self.active_tokens.append(tl)
+        # I hate not having macros
+        #log.debug('  => post-push active keywords: top: %s, botton %s' %
+        #          ([x.match for x in self.active_keywords[-1]],
+        #           [x.match for x in self.active_keywords[0]]))
 
     def pop_context(self):
+        log.debug('pop_context')
         self.active_keywords.pop(-1)
         self.active_tokens.pop(-1)
+        # I hate not having macros
+        #log.debug('  => post-pop active keywords: top: %s, botton %s' %
+        #          ([x.match for x in self.active_keywords[-1]],
+        #           [x.match for x in self.active_keywords[0]]))
+
 
     class TokenDef():
         """A token definition for classifying tokens."""
         def __init__(self, match, type):
-            self.match = match
+            self.raw = self.match = match
             pre = '' if type.startswith('_') else '_'
             suf = '' if type.endswith('_') else '_'
             self.type = pre + type + suf
@@ -298,7 +314,7 @@ class Lexer(TokenSet):
             self.file = file
             self.line = line
             self.level = level
-    
+
     class File:
         """A single input file, iterable for relevant input lines."""
 
@@ -337,6 +353,9 @@ class Lexer(TokenSet):
 
             level = self.level
             for line in iter(self.input):
+                idx = line.find('#')
+                if idx >= 0:
+                    line = line[0:idx]
                 self.lineno += 1
                 for c in line:
                     if c == ' ':
@@ -347,7 +366,7 @@ class Lexer(TokenSet):
                         break
                 line = line.strip(' \t\n')
 
-                if not line or line.startswith('#'):
+                if not line:
                     continue
 
                 self.line = line

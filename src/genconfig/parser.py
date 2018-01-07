@@ -37,7 +37,8 @@ class Node:
             print('should generate configuration for node %s' % str(self))
 
 class NodeDef:
-    def __init__(self, name, type, extra, keywords, tokens, rules, generate):
+    def __init__(self, name, type, extra, keywords, tokens, rules,
+                 generate = None):
         self.name = name
         self.type = type
         self.extra_tokens = extra
@@ -52,7 +53,8 @@ class NodeDef:
         Parser.nodes[name] = self
 
     def generate_config(self, fs):
-        self.generate(self, self.nodes, fs)
+        if self.generate:
+            self.generate(self, self.nodes, fs)
 
 class RuleSet(Lexer):
     """A class for handling the rules the parser understands."""
@@ -150,7 +152,7 @@ class Parser(RuleSet):
 
         log.debug('%s block: %s' %
                    (node_name, ' '.join(x.str for x in tokens)))
-        
+
         while tokens:
             xlated = self.translate_tokens(tokens)
             tknstr = ' '.join(x.type for x in tokens)
@@ -184,7 +186,7 @@ class Parser(RuleSet):
                                  (str(nodedef.type), rule.callback))
                 else:
                     c(*args)
-        
+
         self.pop_context()
 
         return node
@@ -205,7 +207,7 @@ class Parser(RuleSet):
                     match = m
             else:
                 log.debug(' => mismatch')
-                    
+
         return rule, match.group(0) if match else None
 
     class Rule:
