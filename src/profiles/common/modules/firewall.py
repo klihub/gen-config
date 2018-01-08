@@ -203,70 +203,114 @@ class Firewall(Node):
     def dump(self):
         print('firewall')
 
-def generate_firewall(nodedef, nodes, fs):
-    print('generate_firewall...')
-
-    ipt = IPTables()
-
-    # allow conntrack-kosher traffic
+def allow_conntrack(ipt):
     c = ipt.chain('filter', 'FORWARD')
-    c.append('-m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT')
+    c.append('-m conntrack --cstate RELATED,ESTABLISHED -j ACCEPT')
 
-    # allow traffic from trusted interfaces, networks, and hosts
-    c.append('-j CHECK-TRUSTED')
-    for fw in nodes:
+def allow_trusted(ipt):
+    c = chain = None
+    for fw in Parser.nodes['firewall'].nodes:
         if fw.trusted_interfaces or fw.trusted_networks or fw.trusted_hosts:
-            c = ipt.chain('filter', 'CHECK-TRUSTED')
+            if not c:
+                chain = 'CHECK-TRUSTED'
+                c = ipt.chain('filter', chain)
             for i in fw.trusted_interfaces:
                 c.append('-i %s -j ACCEPT' % i)
             for n in fw.trusted_networks:
                 c.append('-s %s -j ACCEPT' % n.with_prefixlen)
             for h in fw.trusted_hosts:
                 c.append('-s %s -j ACCEPT' % str(h))
+    if chain:
+        ipt.chain('filter', 'FORWARD').append('-j %s' % chain)
+        ipt.chain('filter', 'INPUT').append('-j %s' % chain)
 
-    # take care of interface isolation
-    c = ipt.chain('filter', 'FORWARD')
-    c.append('-j ISOLATE')
-    c = ipt.chain('filter', 'ISOLATE')
+def allow_services(ipt):
+    # accept DNS traffic if necessary
+    # accept any explicitly allowed services
+    pass
 
-    for devices in fw.isolated:
-        if len(devices) > 1:
-            for src in devices:
-                for dst in devices:
-                    c.append('-i %s -o %s -j DROP' % (src, dst))
-        else:
-            src = dst = devices[0]
-            c.append('-i %s -o %s -j DROP' % (src, dst))
+def isolate_interfaces(ipt):
+    c = chain = None
+    for fw in Parser.nodes['firewall'].nodes:
+        for devices in fw.isolated:
+            if not c:
+                chain = 'CHECK-ISOLATE'
+                c = ipt.chain('filter', chain)
+            if len(devices) == 1:
+                c.append('-i %s -o %s -j DROP' % (devices[0], devices[0]))
+            else:
+                for src in devices:
+                    for dst in devices:
+                        if src != dst:
+                            c.append('-i %s -o %s -j DROP' % (src, dst))
+    if chain:
+        ipt.chain('filter', 'FORWARD').append('-j %s' % chain)
 
-    # take care of SNAT/MASQUERADING
-    c = ipt.chain('nat', 'POSTROUTING')
-    uplinks = []
-    print('snats: %s' % str(fw.snats))
+def nat_source(ipt):
+    c = chain = None
+    uplinks = snats = []
     for i in Parser.nodes['interface'].nodes:
         if i.uplink:
-            uplinks.append(i)
-            if i.name not in fw.snats:
-                fw.snats.append(i.name)
-        if i.name in fw.snats:
-            if i.addresses == 'dhcp':
-                c.append('-o %s -j MASQUERADE' % i.name)
-            else:
-                c.append('-o %s -j SNAT --to %s' % str(i.addresses[0].ip))
+            uplinks.append(i.name)
+    for fw in Parser.nodes['firewall'].nodes:
+        snats += fw.snats
 
-    # take care of DNATs
-    pre = ipt.chain('nat', 'PREROUTING')
-    out = ipt.chain('nat', 'OUTPUT')
-    for d in fw.children:
-        if d.nodedef.name != 'dnat':
-            continue
+    snats = list(set(uplinks + snats))
+
+    if snats:
+        chain = 'SOURCE-NAT'
+        c = ipt.chain('nat', chain)
+        for i in Parser.nodes['interface'].nodes:
+            if i.name in snats:
+                if i.addresses == 'dhcp':
+                    c.append('-o %s -j MASQUERADE' % i.name)
+                else:
+                    c.append('-o %s -j SNAT --to %s' %
+                             (i.name, str(i.addresses[0])))
+        ipt.chain('nat', 'POSTROUTING').append('-j %s' % chain)
+
+def nat_destination(ipt):
+    dnats = []
+    pre = None
+    out = None
+    for fw in Parser.nodes['firewall'].nodes:
+        for d in fw.children:
+            if d.nodedef.name == 'dnat':
+                dnats.append(d)
+                if d.ifout:
+                    out = d
+                else:
+                    pre = d
+
+    if pre:
+        pre = ipt.chain('nat', 'PREROUTING')
+    if out:
+        out = ipt.chain('nat', 'OUTPUT')
+    for d in dnats:
         if d.ifout:
             out.append(d.generate())
         else:
             pre.append(d.generate())
 
-    # accept DNS traffic if necessary
+def custom_rules(ipt):
+    for fw in Parser.nodes['firewall'].nodes:
+        for c in fw.children:
+            if c.nodedef.name not in ['allow', 'block', 'deny']:
+                continue
+            ipt.chain('filter', c.chain).append(c.generate())
 
-    # take care of any other accept rules
+def generate_firewall(nodedef, nodes, fs):
+    print('generate_firewall...')
+
+    ipt = IPTables()
+
+    allow_conntrack(ipt)
+    allow_trusted(ipt)
+    allow_services(ipt)
+    isolate_interfaces(ipt)
+    nat_source(ipt)
+    nat_destination(ipt)
+    custom_rules(ipt)
 
     # write out ruleset
     ipt.write(fs)
@@ -283,38 +327,35 @@ class Dnat(Node):
         self.dst_addr = self.dst_port = None
         self.to = None
 
-    def parse_in(self, kw_in, token):
-        self.ifin = token.str
-        if self.ifout:
+    def parse_interface(self, kw_dir, token):
+        if ((kw_dir.type == '_in_' and self.ifout) or
+            (kw_dir.type == '_out_' and self.ifin)):
             raise RuntimeError('%s:%s: DNAT with both in and out interfaces' %
                                self.where())
+        if kw_dir.type == '_in_':
+            self.ifin = token.str
+        else:
+            self.ifout = token.str
 
-    def parse_out(self, kw_out, token):
-        self.ifout = token.str
-        if self.ifin:
-            raise RuntimeError('%s:%s: DNAT with both in and out interfaces' %
-                               self.where())
-
-    def parse_proto(self, token):
+    def parse_protocol(self, token):
         self.proto = token.str
 
-    def parse_src(self, kw_src, token):
-        src = token.str
-        if src.startswith(':'):
-            self.src_port = src[1:]
-        elif ':' in src:
-            self.src_addr, self.src_port = src.split(':')
+    def parse_srcdst(self, kw_dir, token):
+        addr = port = None
+        if token.type == '_int_':
+            port = token.str
         else:
-            self.src_addr = src
-
-    def parse_dst(self, kw_dst, token):
-        dst = token.str
-        if dst.startswith(':'):
-            self.dst_port = dst[1:]
-        elif ':' in dst:
-            self.dst_addr, self.dst_port = dst.split(':')
+            spec = token.str
+            if spec.startswith(':'):
+                port = spec[1:]
+            elif ':' in spec:
+                addr, port = spec.split(':')
+            else:
+                addr = spec
+        if kw_dir.type == '_src_':
+            self.src_addr, self.src_port = addr, port
         else:
-            self.dst_addr = dst
+            self.dst_addr, self.dst_port = addr, port
 
     def parse_to(self, kw_to, token):
         self.to = token.str
@@ -330,7 +371,7 @@ class Dnat(Node):
         self.restore += '%s%s' % (t, str)
 
     def generate(self):
-        str = ''
+        str = ' '.join([x.generate() for x in self.children])
         str = self.append(str, '-i', self.ifin)
         str = self.append(str, '-o', self.ifout)
         str = self.append(str, '-p', self.proto)
@@ -340,7 +381,6 @@ class Dnat(Node):
         str = self.append(str, '--dport', self.dst_port)
         str = self.append(str, '-j DNAT --to-destination', self.to)
         return str
-
 
 class Match(Node):
     def __init__(self, nodedef, root, parent, node_tkn, module):
@@ -357,6 +397,77 @@ class Match(Node):
 
     def generate(self):
         return '--match %s' + ' '.join([x.str for x in self.args])
+
+class Allow(Node):
+    def __init__(self, nodedef, root, parent, node_tkn):
+        Node.__init__(self, nodedef, root, parent, node_tkn)
+        self.node_tkn = node_tkn
+        self.action = 'ACCEPT'
+        self.chain = None
+        self.ifin = self.ifout = None
+        self.proto = None
+        self.src_addr = self.src_port = self.dst_addr = self.dst_port = None
+
+    def parse_chain(self, kw_chain):
+        self.chain = kw_chain.str.strip('_').upper()
+
+    def parse_interface(self, kw_dir, token):
+        if kw_dir.type == '_in_':
+            self.ifin = token.str
+        else:
+            self.ifout = token.str
+
+    def parse_protocol(self, token):
+        self.proto = token.str
+
+    def parse_srcdst(self, kw_dir, token):
+        addr = port = None
+        if token.type == '_int_':
+            port = token.str
+        else:
+            spec = token.str
+            if spec.startswith(':'):
+                port = spec[1:]
+            elif ':' in spec:
+                addr, port = spec.split(':')
+            else:
+                addr = spec
+        if kw_dir.type == '_src_':
+            self.src_addr, self.src_port = addr, port
+        else:
+            self.dst_addr, self.dst_port = addr, port
+
+    def append(self, str, option, arg):
+        t = ' ' if str else ''
+        if arg:
+            str += '%s%s %s' % (t, option, arg)
+        return str
+
+    def restore(self, str):
+        t = ' ' if self.restore else ''
+        self.restore += '%s%s' % (t, str)
+
+    def generate(self):
+        str = ' '.join([x.generate() for x in self.children])
+        str = self.append(str, '-i', self.ifin)
+        str = self.append(str, '-o', self.ifout)
+        str = self.append(str, '-p', self.proto)
+        str = self.append(str, '-s', self.src_addr)
+        str = self.append(str, '--sport', self.src_port)
+        str = self.append(str, '-d', self.dst_addr)
+        str = self.append(str, '--dport', self.dst_port)
+        str = self.append(str, '-j',  self.action)
+        return str
+
+class Block(Allow):
+    def __init__(self, nodedef, root, parent, node_tkn):
+        Allow.__init__(self, nodedef, root, parent, node_tkn)
+        self.action = 'DROP'
+
+class Deny(Allow):
+    def __init__(self, nodedef, root, parent, node_tkn):
+        Allow.__init__(self, nodedef, root, parent, node_tkn)
+        self.action = 'REJECT'
 
 
 NodeDef(
@@ -376,18 +487,42 @@ NodeDef(
     generate_firewall
 )
 
-
 NodeDef('dnat', Dnat, 0,
         Lexer.Keywords(['in', 'out', 'tcp', 'udp', 'src', 'dst', 'to']),
         Lexer.NoTokens(),
-        [Parser.Rule('_in_ _token_' , 'parse_in'   ),
-         Parser.Rule('_out_ _token_', 'parse_out'  ),
-         Parser.Rule('_tcp_|_udp_'  , 'parse_proto'),
-         Parser.Rule('_src_ _token_', 'parse_src'  ),
-         Parser.Rule('_dst_ _token_', 'parse_dst'  ),
-         Parser.Rule('_to_ _token_' , 'parse_to'   )])
+        [Parser.Rule('(_in_|_out_) _token_' , 'parse_interface'),
+         Parser.Rule('(_tcp_|_udp_)'        , 'parse_protocol' ),
+         Parser.Rule('(_src_|_dst_) _token_', 'parse_srcdst'   ),
+         Parser.Rule('_to_ _token_'         , 'parse_to'       )])
 
 NodeDef('match', Match, 1,
         Lexer.NoKeywords(),
         [Lexer.TokenRegex(r'(-.*)', 'option')],
         [Parser.Rule('_option_ _token_', 'add_option')])
+
+NodeDef('allow', Allow, 0,
+        Lexer.Keywords(['input', 'forward', 'output', 'in', 'out',
+                        'src', 'dst', 'tcp', 'udp', 'icmp']),
+        Lexer.NoTokens(),
+        [Parser.Rule('(_input_|_output_|_forward_)' , 'parse_chain'    ),
+         Parser.Rule('(_in_|_out_) _token_'         , 'parse_interface'),
+         Parser.Rule('(_tcp_|_udp_|_icmp_)'         , 'parse_protocol' ),
+         Parser.Rule('(_src_|_dst_) (_token_|_int_)', 'parse_srcdst'   )])
+
+NodeDef('block', Block, 0,
+        Lexer.Keywords(['input', 'forward', 'output', 'in', 'out',
+                        'src', 'dst', 'tcp', 'udp', 'icmp']),
+        Lexer.NoTokens(),
+        [Parser.Rule('(_input_|_output_|_forward_)' , 'parse_chain'    ),
+         Parser.Rule('(_in_|_out_) _token_'         , 'parse_interface'),
+         Parser.Rule('(_tcp_|_udp_|_icmp_)'         , 'parse_protocol' ),
+         Parser.Rule('(_src_|_dst_) (_token_|_int_)', 'parse_srcdst'   )])
+
+NodeDef('deny', Deny, 0,
+        Lexer.Keywords(['input', 'forward', 'output', 'in', 'out',
+                        'src', 'dst', 'tcp', 'udp', 'icmp']),
+        Lexer.NoTokens(),
+        [Parser.Rule('(_input_|_output_|_forward_)' , 'parse_chain'    ),
+         Parser.Rule('(_in_|_out_) _token_'         , 'parse_interface'),
+         Parser.Rule('(_tcp_|_udp_|_icmp_)'         , 'parse_protocol' ),
+         Parser.Rule('(_src_|_dst_) (_token_|_int_)', 'parse_srcdst'   )])
