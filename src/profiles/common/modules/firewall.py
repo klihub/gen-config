@@ -386,17 +386,14 @@ class Match(Node):
     def __init__(self, nodedef, root, parent, node_tkn, module):
         Node.__init__(self, nodedef, root, parent, node_tkn)
         self.module = module
-        self.args = []
-        print('match %s' % self.module.str)
+        self.args = [self.module]
 
     def add_option(self, tkn_option, tkn_arg):
-        print('match %s option %s %s' %
-              (self.module.str, tkn_option.str, tkn_arg.str))
         self.args.append(tkn_option)
         self.args.append(tkn_arg)
 
     def generate(self):
-        return '--match %s' + ' '.join([x.str for x in self.args])
+        return '--match ' + ' '.join([x.str for x in self.args])
 
 class Allow(Node):
     def __init__(self, nodedef, root, parent, node_tkn):

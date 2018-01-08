@@ -101,3 +101,4 @@ def debug(*args):
         log(Logger.LOG_DEBUG, '[%s] %s' % (caller, msg))
 
 set_mask(Logger.default_levels)
+

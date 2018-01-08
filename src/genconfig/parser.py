@@ -124,15 +124,23 @@ class Parser(RuleSet):
             tkn = self.pull_token()
             self.parse_node(tkn, self.root)
 
+    def where(self, tkn = None):
+        if not tkn:
+            tkn = self.node_tkn
+        return (tkn.file, tkn.line)
+
     def finalize_nodes(self):
         self.root.finalize()
 
     def demand_load(self, module):
-        if module not in self.nodes.keys():
-            self.load_module(module)
-            if module in self.nodes.keys():
-                self.enumerate_tokens()
-                self.compile_rules()
+        if module in self.nodes.keys():
+            return True
+        if self.try_module(module):
+            self.enumerate_tokens()
+            self.compile_rules()
+            return True
+        else:
+            return False
 
     def parse_node(self, node_tkn, parent):
         node_name = node_tkn.str
@@ -140,7 +148,7 @@ class Parser(RuleSet):
         self.demand_load(node_name)
         if node_name not in self.nodes.keys():
             raise RuntimeError('%s:%d: unknown node type %s' %
-                               (where(node_tkn), node_name))
+                               (self.where(node_tkn) + (node_name,)))
 
         self.push_context(node_name)
 
@@ -168,7 +176,8 @@ class Parser(RuleSet):
                 c = self.parse_node(c_tkn, node)
 
                 if c is None:
-                    raise RunTimeError('%s:%d: failed to parse' % where(c_tkn))
+                    raise RunTimeError('%s:%d: failed to parse' %
+                                       self.where(c_tkn))
 
                 tokens = self.pull_tokens(node_tkn.level)
             else:

@@ -115,6 +115,20 @@ class Lexer(TokenSet):
                 pass
         raise RuntimeError('module "%s" not found in any profile' % name)
 
+    def try_module(self, name):
+        profiles = [ self.profile, 'common' ]
+        for p in [self.profile, 'common']:
+            m = p + '.modules.' + name
+            if m in sys.modules:
+                return
+            log.progress('looking for module %s in %s profile' % (name, p))
+            try:
+                sys.modules[m] = importlib.import_module(m)
+                return True
+            except ImportError as e:
+                pass
+        return False
+
     def load_modules(self, input):
         for tkn in input:
             if tkn.level != -1:
