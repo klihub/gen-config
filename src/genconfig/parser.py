@@ -145,10 +145,11 @@ class Parser(RuleSet):
     def parse_node(self, node_tkn, parent):
         node_name = node_tkn.str
         log.debug('parsing node %s...' % node_name)
-        self.demand_load(node_name)
+
         if node_name not in self.nodes.keys():
-            raise RuntimeError('%s:%d: unknown node type %s' %
-                               (self.where(node_tkn) + (node_name,)))
+            if not self.demand_load(node_name):
+                raise RuntimeError('%s:%d: unknown node type %s' %
+                                   (self.where(node_tkn) + (node_name,)))
 
         self.push_context(node_name)
 
@@ -171,14 +172,21 @@ class Parser(RuleSet):
             rule, match = self.match_rule(self.rules[node_name], xltstr)
 
             if rule is None:
-                self.pushback_tokens(tokens[1:])
-                c_tkn = tokens[0]
-                c = self.parse_node(c_tkn, node)
+                if tokens[0].str in self.nodes.keys() or \
+                   self.demand_load(tokens[0].str):
+                    self.pushback_tokens(tokens[1:])
+                    c_tkn = tokens[0]
+                    c = self.parse_node(c_tkn, node)
 
-                if c is None:
-                    raise RunTimeError('%s:%d: failed to parse' %
-                                       self.where(c_tkn))
-
+                    if c is None:
+                        raise RuntimeError('%s:%d: failed to parse' %
+                                           self.where(c_tkn))
+                else:
+                    log.debug('pushing back tokens %s' %
+                              ','.join([x.str for x in tokens]))
+                    self.pushback_tokens(tokens[0:])
+                    self.pop_context()
+                    return node
                 tokens = self.pull_tokens(node_tkn.level)
             else:
                 log.debug('%s => %s (%s)' %

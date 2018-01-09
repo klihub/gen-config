@@ -316,86 +316,7 @@ def generate_firewall(nodedef, nodes, fs):
     ipt.write(fs)
 
 
-class Dnat(Node):
-    def __init__(self, nodedef, root, parent, node_tkn):
-        Node.__init__(self, nodedef, root, parent, node_tkn)
-        self.node_tkn = node_tkn
-        self.ifin = None
-        self.ifout = None
-        self.proto = None
-        self.src_addr = self.src_port = None
-        self.dst_addr = self.dst_port = None
-        self.to = None
-
-    def parse_interface(self, kw_dir, token):
-        if ((kw_dir.type == '_in_' and self.ifout) or
-            (kw_dir.type == '_out_' and self.ifin)):
-            raise RuntimeError('%s:%s: DNAT with both in and out interfaces' %
-                               self.where())
-        if kw_dir.type == '_in_':
-            self.ifin = token.str
-        else:
-            self.ifout = token.str
-
-    def parse_protocol(self, token):
-        self.proto = token.str
-
-    def parse_srcdst(self, kw_dir, token):
-        addr = port = None
-        if token.type == '_int_':
-            port = token.str
-        else:
-            spec = token.str
-            if spec.startswith(':'):
-                port = spec[1:]
-            elif ':' in spec:
-                addr, port = spec.split(':')
-            else:
-                addr = spec
-        if kw_dir.type == '_src_':
-            self.src_addr, self.src_port = addr, port
-        else:
-            self.dst_addr, self.dst_port = addr, port
-
-    def parse_to(self, kw_to, token):
-        self.to = token.str
-
-    def append(self, str, option, arg):
-        t = ' ' if str else ''
-        if arg:
-            str += '%s%s %s' % (t, option, arg)
-        return str
-
-    def restore(self, str):
-        t = ' ' if self.restore else ''
-        self.restore += '%s%s' % (t, str)
-
-    def generate(self):
-        str = ' '.join([x.generate() for x in self.children])
-        str = self.append(str, '-i', self.ifin)
-        str = self.append(str, '-o', self.ifout)
-        str = self.append(str, '-p', self.proto)
-        str = self.append(str, '-s', self.src_addr)
-        str = self.append(str, '--sport', self.src_port)
-        str = self.append(str, '-d', self.dst_addr)
-        str = self.append(str, '--dport', self.dst_port)
-        str = self.append(str, '-j DNAT --to-destination', self.to)
-        return str
-
-class Match(Node):
-    def __init__(self, nodedef, root, parent, node_tkn, module):
-        Node.__init__(self, nodedef, root, parent, node_tkn)
-        self.module = module
-        self.args = [self.module]
-
-    def add_option(self, tkn_option, tkn_arg):
-        self.args.append(tkn_option)
-        self.args.append(tkn_arg)
-
-    def generate(self):
-        return '--match ' + ' '.join([x.str for x in self.args])
-
-class Allow(Node):
+class Rule(Node):
     def __init__(self, nodedef, root, parent, node_tkn):
         Node.__init__(self, nodedef, root, parent, node_tkn)
         self.node_tkn = node_tkn
@@ -456,16 +377,45 @@ class Allow(Node):
         str = self.append(str, '-j',  self.action)
         return str
 
-class Block(Allow):
+class Allow(Rule):
     def __init__(self, nodedef, root, parent, node_tkn):
-        Allow.__init__(self, nodedef, root, parent, node_tkn)
+        Rule.__init__(self, nodedef, root, parent, node_tkn)
+        self.action = 'ACCEPT'
+
+class Block(Rule):
+    def __init__(self, nodedef, root, parent, node_tkn):
+        Rule.__init__(self, nodedef, root, parent, node_tkn)
         self.action = 'DROP'
 
-class Deny(Allow):
+class Deny(Rule):
     def __init__(self, nodedef, root, parent, node_tkn):
-        Allow.__init__(self, nodedef, root, parent, node_tkn)
+        Rule.__init__(self, nodedef, root, parent, node_tkn)
         self.action = 'REJECT'
 
+class Dnat(Rule):
+    def __init__(self, nodedef, root, parent, node_tkn):
+        Rule.__init__(self, nodedef, root, parent, node_tkn)
+
+    def parse_to(self, kw_to, token):
+        self.to = token.str
+
+    def generate(self):
+        self.action = '-j DNAT --to-destination %s' % self.to
+        return Rule.generate(self)
+
+
+class Match(Node):
+    def __init__(self, nodedef, root, parent, node_tkn, module):
+        Node.__init__(self, nodedef, root, parent, node_tkn)
+        self.module = module
+        self.args = [self.module]
+
+    def add_option(self, tkn_option, tkn_arg):
+        self.args.append(tkn_option)
+        self.args.append(tkn_arg)
+
+    def generate(self):
+        return '--match ' + ' '.join([x.str for x in self.args])
 
 NodeDef(
     'firewall', Firewall, 0,
@@ -484,42 +434,26 @@ NodeDef(
     generate_firewall
 )
 
-NodeDef('dnat', Dnat, 0,
-        Lexer.Keywords(['in', 'out', 'tcp', 'udp', 'src', 'dst', 'to']),
-        Lexer.NoTokens(),
-        [Parser.Rule('(_in_|_out_) _token_' , 'parse_interface'),
-         Parser.Rule('(_tcp_|_udp_)'        , 'parse_protocol' ),
-         Parser.Rule('(_src_|_dst_) _token_', 'parse_srcdst'   ),
-         Parser.Rule('_to_ _token_'         , 'parse_to'       )])
-
 NodeDef('match', Match, 1,
         Lexer.NoKeywords(),
         [Lexer.TokenRegex(r'(-.*)', 'option')],
         [Parser.Rule('_option_ _token_', 'add_option')])
 
-NodeDef('allow', Allow, 0,
-        Lexer.Keywords(['input', 'forward', 'output', 'in', 'out',
-                        'src', 'dst', 'tcp', 'udp', 'icmp']),
-        Lexer.NoTokens(),
-        [Parser.Rule('(_input_|_output_|_forward_)' , 'parse_chain'    ),
-         Parser.Rule('(_in_|_out_) _token_'         , 'parse_interface'),
-         Parser.Rule('(_tcp_|_udp_|_icmp_)'         , 'parse_protocol' ),
-         Parser.Rule('(_src_|_dst_) (_token_|_int_)', 'parse_srcdst'   )])
+KEYWORDS = Lexer.Keywords(['input', 'forward', 'output',
+                           'in', 'out',
+                           'src', 'dst', 'tcp', 'udp', 'icmp'])
+NO_KEYWORDS = Lexer.NoKeywords()
+NO_TOKENS = Lexer.NoTokens()
 
-NodeDef('block', Block, 0,
-        Lexer.Keywords(['input', 'forward', 'output', 'in', 'out',
-                        'src', 'dst', 'tcp', 'udp', 'icmp']),
-        Lexer.NoTokens(),
-        [Parser.Rule('(_input_|_output_|_forward_)' , 'parse_chain'    ),
+RULES = [Parser.Rule('(_input_|_output_|_forward_)' , 'parse_chain'    ),
          Parser.Rule('(_in_|_out_) _token_'         , 'parse_interface'),
          Parser.Rule('(_tcp_|_udp_|_icmp_)'         , 'parse_protocol' ),
-         Parser.Rule('(_src_|_dst_) (_token_|_int_)', 'parse_srcdst'   )])
+         Parser.Rule('(_src_|_dst_) (_token_|_int_)', 'parse_srcdst'   )]
 
-NodeDef('deny', Deny, 0,
-        Lexer.Keywords(['input', 'forward', 'output', 'in', 'out',
-                        'src', 'dst', 'tcp', 'udp', 'icmp']),
-        Lexer.NoTokens(),
-        [Parser.Rule('(_input_|_output_|_forward_)' , 'parse_chain'    ),
-         Parser.Rule('(_in_|_out_) _token_'         , 'parse_interface'),
-         Parser.Rule('(_tcp_|_udp_|_icmp_)'         , 'parse_protocol' ),
-         Parser.Rule('(_src_|_dst_) (_token_|_int_)', 'parse_srcdst'   )])
+NodeDef('allow', Allow, 0, KEYWORDS, NO_TOKENS, RULES)
+NodeDef('block', Block, 0, KEYWORDS, NO_TOKENS, RULES)
+NodeDef('deny' , Deny , 0, KEYWORDS, NO_TOKENS, RULES)
+NodeDef('dnat' , Dnat , 0,
+        KEYWORDS + Lexer.Keywords(['to']),
+        NO_TOKENS,
+        RULES + [Parser.Rule('_to_ _token_', 'parse_to')])
