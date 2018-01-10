@@ -26,9 +26,8 @@ class IANAServices:
                 self.services[proto][service] = port
                 for a in aliasen:
                     self.services[proto][a] = port
-    
+
     def port(self, name, proto = 'tcp'):
-        print('self: %s, port: name=%s, proto=%s' % (self, name, proto))
         if name in self.services[proto].keys():
             return self.services[proto][name]
         if name in self.ALIASEN.keys():
@@ -39,12 +38,12 @@ class IANAServices:
 
 class Service(Node):
     services = IANAServices()
-    
+
     def __init__(self, nodedef, root, parent, node_tkn):
         Node.__init__(self, nodedef, root, parent, node_tkn)
         self.enable = []
         self.disable = []
-    
+
     def parse_service(self, state, service, *tokens):
         name = service.str
         if tokens:
@@ -66,7 +65,7 @@ def generate_services(nodedef, nodes, fs):
 NodeDef('service', Service, 0,
         Lexer.Keywords(['enable', 'disable', 'tcp', 'udp']),
         Lexer.NoTokens(),
-        [Parser.Rule('(_enable_|_disable_) _token_ (_tcp_|_udp_)?',
+        [Parser.Rule('(_enable_|_disable_) _token_( _tcp_|_udp_)?',
                      'parse_service')],
         generate_services)
 

@@ -370,14 +370,14 @@ class Rule(Node):
 
     def generate(self):
         self.rule = ' '.join([x.generate() for x in self.children])
-        self.append(str, '-i', self.ifin)
-        self.append(str, '-o', self.ifout)
-        self.append(str, '-p', self.proto)
-        self.append(str, '-s', self.src_addr)
-        self.append(str, '--sport', self.src_port)
-        self.append(str, '-d', self.dst_addr)
-        self.append(str, '--dport', self.dst_port)
-        self.append(str, '-j',  self.action)
+        self.append('-i', self.ifin)
+        self.append('-o', self.ifout)
+        self.append('-p', self.proto)
+        self.append('-s', self.src_addr)
+        self.append('--sport', self.src_port)
+        self.append('-d', self.dst_addr)
+        self.append('--dport', self.dst_port)
+        self.append('-j',  self.action)
         return self.rule
 
 class Allow(Rule):
