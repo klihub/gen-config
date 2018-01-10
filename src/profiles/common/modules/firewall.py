@@ -225,8 +225,8 @@ def allow_trusted(ipt):
         ipt.chain('filter', 'INPUT').append('-j %s' % chain)
 
 def allow_services(ipt):
-    # accept DNS traffic if necessary
-    # accept any explicitly allowed services
+    # accept DNS and any other implicitly enabled services if necessary
+    # accept any explicitly enabled services
     pass
 
 def isolate_interfaces(ipt):
@@ -325,6 +325,7 @@ class Rule(Node):
         self.ifin = self.ifout = None
         self.proto = None
         self.src_addr = self.src_port = self.dst_addr = self.dst_port = None
+        self.rule = ''
 
     def parse_chain(self, kw_chain):
         self.chain = kw_chain.str.strip('_').upper()
@@ -337,6 +338,9 @@ class Rule(Node):
 
     def parse_protocol(self, token):
         self.proto = token.str
+
+    def parse_service(self, token):
+        pass
 
     def parse_srcdst(self, kw_dir, token):
         addr = port = None
@@ -355,27 +359,26 @@ class Rule(Node):
         else:
             self.dst_addr, self.dst_port = addr, port
 
-    def append(self, str, option, arg):
-        t = ' ' if str else ''
+    def append(self, option, arg):
+        t = ' ' if self.rule else ''
         if arg:
-            str += '%s%s %s' % (t, option, arg)
-        return str
+            self.rule += '%s%s %s' % (t, option, arg)
 
     def restore(self, str):
         t = ' ' if self.restore else ''
         self.restore += '%s%s' % (t, str)
 
     def generate(self):
-        str = ' '.join([x.generate() for x in self.children])
-        str = self.append(str, '-i', self.ifin)
-        str = self.append(str, '-o', self.ifout)
-        str = self.append(str, '-p', self.proto)
-        str = self.append(str, '-s', self.src_addr)
-        str = self.append(str, '--sport', self.src_port)
-        str = self.append(str, '-d', self.dst_addr)
-        str = self.append(str, '--dport', self.dst_port)
-        str = self.append(str, '-j',  self.action)
-        return str
+        self.rule = ' '.join([x.generate() for x in self.children])
+        self.append(str, '-i', self.ifin)
+        self.append(str, '-o', self.ifout)
+        self.append(str, '-p', self.proto)
+        self.append(str, '-s', self.src_addr)
+        self.append(str, '--sport', self.src_port)
+        self.append(str, '-d', self.dst_addr)
+        self.append(str, '--dport', self.dst_port)
+        self.append(str, '-j',  self.action)
+        return self.rule
 
 class Allow(Rule):
     def __init__(self, nodedef, root, parent, node_tkn):
@@ -417,22 +420,20 @@ class Match(Node):
     def generate(self):
         return '--match ' + ' '.join([x.str for x in self.args])
 
-NodeDef(
-    'firewall', Firewall, 0,
-    Lexer.Keywords(['protect', 'accept', 'drop', 'reject',
-                    'trusted', 'host', 'interface', 'net', 'network',
-                    'snat', 'input', 'output', 'forward',
-                    'isolate']),
-    Lexer.NoTokens(),
-    [Parser.Rule('_protect_ _token_(, _token_)*' , 'parse_protect'),
-     Parser.Rule('_isolate_ _token_(, _token_)*' , 'parse_isolate'),
-     Parser.Rule('_trusted_ (_interface_|_network_|_host_) _token_',
-                 'parse_trusted'),
-     Parser.Rule('_trusted_ (_interface_)'       , 'parse_trusted'),
-     Parser.Rule('_snat_ _token_(, _token_)*'    , 'parse_snat'   ),
-     Parser.Rule('_accept_ _token_( _token_)*'   , 'parse_accept' )],
-    generate_firewall
-)
+NodeDef('firewall', Firewall, 0,
+        Lexer.Keywords(['protect', 'accept', 'drop', 'reject',
+                        'trusted', 'host', 'interface', 'net', 'network',
+                        'snat', 'input', 'output', 'forward',
+                        'isolate']),
+        Lexer.NoTokens(),
+        [Parser.Rule('_protect_ _token_(, _token_)*' , 'parse_protect'),
+         Parser.Rule('_isolate_ _token_(, _token_)*' , 'parse_isolate'),
+         Parser.Rule('_trusted_ (_interface_|_network_|_host_) _token_',
+                     'parse_trusted'),
+         Parser.Rule('_trusted_ (_interface_)'       , 'parse_trusted'),
+         Parser.Rule('_snat_ _token_(, _token_)*'    , 'parse_snat'   ),
+         Parser.Rule('_accept_ _token_( _token_)*'   , 'parse_accept' )],
+        generate_firewall)
 
 NodeDef('match', Match, 1,
         Lexer.NoKeywords(),
