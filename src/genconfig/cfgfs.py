@@ -134,10 +134,11 @@ class CfgFS:
                 path = destdir + self.dst
                 log.progress('creating %slink %s -> %s...' %
                              (kind, self.src, path))
+                os.makedirs(os.path.dirname(path), 0o755, True)
                 if self.symbolic:
-                    os.symlink(self.src, dst)
+                    os.symlink(self.src, path)
                 else:
-                    os.link(self.src, dst)
+                    os.link(self.src, path)
                 return True
 
 
@@ -167,7 +168,7 @@ class CfgFS:
                 f = self.files[path] = CfgFS.File(path, mode)
         return f
 
-    def link(src, dst, symbolic = False):
+    def link(self, src, dst, symbolic = False):
         if not os.path.isabs(dst):
             raise RuntimeError('path %s is not absolute' % dst)
         if dst in self.files:
@@ -177,13 +178,13 @@ class CfgFS:
                                    ('symbolic ' if symlink else '',
                                     l.src, l.dst, l.dst))
         else:
-            l = CfgFS.Link(src, dst, symlink)
+            l = self.files[dst] = CfgFS.Link(src, dst, symbolic)
         return l
 
-    def hardlink(src, dst):
+    def hardlink(self, src, dst):
         return self.link(src, dst, False)
 
-    def symlink(src, dst):
+    def symlink(self, src, dst):
         return self.link(src, dst, True)
 
     def create_dirs(self, destdir):
@@ -201,7 +202,7 @@ class CfgFS:
         created = False
         symlinks = []
         for k, v in self.files.items():
-            if type(v) == CfgFS.Link and v.symlink and v not in symlinks:
+            if type(v) == CfgFS.Link and v.symbolic and v not in symlinks:
                 symlinks.append(v)
         for l in symlinks:
             if l.commit(destdir):
