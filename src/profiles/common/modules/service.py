@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 
-import re
+import re, configparser
 from genconfig.parser import *
 
 class IANAServices:
     ALIASEN = {
         'dhcp':         'bootps',
+        'dhcpd':        'bootps',
         'dhcp-server':  'bootps',
         'dhcp-client':  'bootpc',
         'secure-shell': 'ssh',
-        'openssh':      'ssh'
+        'openssh':      'ssh',
+        'sshd':         'ssh',
     }
     def __init__(self, path = '/etc/services'):
         self.services = { 'tcp': {}, 'udp': {} }
@@ -36,6 +38,16 @@ class IANAServices:
     def protocol(self, name):
         return 'tcp' # XXX TODO
 
+class SystemdService:
+    def __init__(self, name):
+        self.name = name
+        self.path = '/usr/lib/systemd/system/' + name + '.service'
+        self.file = configparser.ConfigParser(strict = False)
+        self.file.read_file(open(self.path), self.path)
+
+    def get(self, section, key, default = None):
+        return self.file.get(section, key) or default
+
 class Service(Node):
     services = IANAServices()
 
@@ -59,8 +71,25 @@ class Service(Node):
 
 
 def generate_services(nodedef, nodes, fs):
-    print('services...')
+    enabled = []
+    disabled = []
+    for s in Parser.nodes['service'].nodes:
+        enabled += [e[0] for e in s.enable]
+        disabled += [e[0] for e in s.disable]
+    enabled = list(set(enabled))
+    disabled = list(set(disabled))
 
+    for s in enabled:
+        service = SystemdService(s)
+        target = service.get('Install', 'WantedBy', 'multi-user.target')
+        src = service.path
+        dst = '/etc/systemd/system/%s/%s.service' % (target, s)
+        fs.symlink(src, dst)
+
+    for s in disabled:
+        src = '/dev/null'
+        dst = '/etc/systemd/system/%s.service' % s
+        fs.symlink(src, dst)
 
 NodeDef('service', Service, 0,
         Lexer.Keywords(['enable', 'disable', 'tcp', 'udp']),

@@ -300,8 +300,6 @@ def custom_rules(ipt):
             ipt.chain('filter', c.chain).append(c.generate())
 
 def generate_firewall(nodedef, nodes, fs):
-    print('generate_firewall...')
-
     ipt = IPTables()
 
     allow_conntrack(ipt)
